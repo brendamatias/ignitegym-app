@@ -98,6 +98,8 @@ export function SignIn() {
                 secureTextEntry
                 onChangeText={onChange}
                 errorMessage={errors.password?.message}
+                onSubmitEditing={handleSubmit(handleSignIn)}
+                returnKeyType="send"
               />
             )}
           />
