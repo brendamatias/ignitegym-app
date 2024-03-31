@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import { TouchableOpacity } from 'react-native';
+import { Center, ScrollView, VStack, Skeleton, Text, Heading, useToast } from 'native-base';
+import { Controller, useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { Center, ScrollView, VStack, Skeleton, Text, Heading, useToast } from 'native-base';
+import * as yup from 'yup';
+
+
+import defaulUserPhotoImg from '@assets/userPhotoDefault.png';
+
+import { api } from '@services/api';
+import { AppError } from '@utils/AppError';
+
+import { useAuth } from '@hooks/useAuth';
 
 import { ScreenHeader } from '@components/ScreenHeader';
+import { Avatar } from '@components/Avatar';
 import { Input } from '@components/Input';
 import { Button } from '@components/Button';
-import { Avatar } from '@components/Avatar';
-import { Controller, useForm } from 'react-hook-form';
-import { useAuth } from '@hooks/useAuth';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
-import { AppError } from '@utils/AppError';
-import { api } from '@services/api';
+
 
 const PHOTO_SIZE = 33;
 
@@ -21,8 +27,6 @@ type FormDataProps = {
   name: string;
   email: string;
   password: string;
-  oldPassword: string;
-  newPassword: string;
   old_password: string;
   confirm_password: string;
 }
@@ -54,11 +58,9 @@ const profileSchema = yup.object({
 export function Profile() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [photoIsLoading, setPhotoIsLoading] = useState(false);
-  const [userPhoto, setUserPhoto] = useState('https://github.com/brendamatias.png');
 
   const toast = useToast();
   const { user, updateUserProfile } = useAuth();
-
   const { control, handleSubmit, formState: { errors } } = useForm<FormDataProps>({
     defaultValues: {
       name: user.name,
@@ -95,12 +97,39 @@ export function Profile() {
           })
         }
 
-        setUserPhoto(uri);
+        const fileExtension = uri.split('.').pop();
+
+        const photoFile = {
+          name: `${user.name}.${fileExtension}`.toLowerCase(),
+          uri,
+          type: `${photoSelected.assets[0].type}/${fileExtension}`
+        } as any;
+
+        const userPhotoUploadForm = new FormData();
+
+        userPhotoUploadForm.append('avatar', photoFile);
+
+        const avatarUpdtedResponse = await api.patch('/users/avatar', userPhotoUploadForm, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+
+        const userUpdated = user;
+        userUpdated.avatar = avatarUpdtedResponse.data.avatar;
+
+        await updateUserProfile(userUpdated);
+
+        toast.show({
+          title: 'Foto atualizada!',
+          placement: 'top',
+          bgColor: 'green.500'
+        })
       }
     } catch (error) {
-      console.log(error);
+      console.log(error)
     } finally {
-      setPhotoIsLoading(false);
+      setPhotoIsLoading(false)
     }
   }
 
@@ -112,6 +141,7 @@ export function Profile() {
       userUpdated.name = data.name;
 
       await api.put('/users', data);
+
       await updateUserProfile(userUpdated);
 
       toast.show({
@@ -132,7 +162,7 @@ export function Profile() {
       setIsUpdating(false);
     }
   }
-
+ 
   return (
     <VStack flex={1}>
       <ScreenHeader title='Perfil' />
@@ -150,7 +180,11 @@ export function Profile() {
               />
             :
               <Avatar
-                source={{ uri: userPhoto }}
+                source={
+                  user.avatar
+                  ? { uri: `${api.defaults.baseURL}/avatar/${user.avatar}` }
+                  : defaulUserPhotoImg
+                }
                 alt="Foto do usuário"
                 size={PHOTO_SIZE}
               />
@@ -162,43 +196,45 @@ export function Profile() {
             </Text>
           </TouchableOpacity>
 
-          <Controller
+          <Controller 
             control={control}
             name="name"
-            render={({ field: { value, onChange }}) => (
-                <Input
-                  bg="gray.600"
-                  placeholder='Nome'
-                  value={value}
-                  onChangeText={onChange}
-                  errorMessage={errors.name?.message}
-                />
+            render={({ field: { value, onChange } }) => (
+              <Input 
+                bg="gray.600" 
+                placeholder='Nome'
+                onChangeText={onChange}
+                value={value}
+                errorMessage={errors.name?.message}
+              />
             )}
           />
 
-          <Controller
+          <Controller 
             control={control}
             name="email"
-            render={({ field: { value, onChange }}) => (
-                <Input
-                  bg="gray.600"
-                  placeholder="E-mail"
-                  value={value}
-                  onChangeText={onChange}
-                  isDisabled
-                />
+            render={({ field: { value, onChange } }) => (
+              <Input 
+                bg="gray.600" 
+                placeholder="E-mail"
+                isDisabled
+                onChangeText={onChange}
+                value={value}
+              />
             )}
           />
 
-          <Heading color="gray.200" fontSize="md" mb={2} alignSelf="flex-start" mt={12}>
+          
+        
+          <Heading color="gray.200" fontSize="md" mb={2} alignSelf="flex-start" mt={12} fontFamily="heading">
             Alterar senha
           </Heading>
 
-          <Controller
+          <Controller 
             control={control}
             name="old_password"
             render={({ field: { onChange } }) => (
-              <Input
+              <Input 
                 bg="gray.600"
                 placeholder="Senha antiga"
                 secureTextEntry
@@ -207,7 +243,7 @@ export function Profile() {
             )}
           />
 
-          <Controller
+          <Controller 
             control={control}
             name="password"
             render={({ field: { onChange } }) => (
@@ -230,16 +266,17 @@ export function Profile() {
                 placeholder="Confirme a nova senha"
                 secureTextEntry
                 onChangeText={onChange}
+                errorMessage={errors.confirm_password?.message}
               />
             )}
           />
 
           <Button
-              title="Atualizar"
-              mt={4}
-              onPress={handleSubmit(handleProfileUpdate)}
-              isLoading={isUpdating}
-            />
+            title="Atualizar"
+            mt={4}
+            onPress={handleSubmit(handleProfileUpdate)}
+            isLoading={isUpdating}
+          />
         </Center>
       </ScrollView>
     </VStack>
